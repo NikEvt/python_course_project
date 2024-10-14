@@ -1,5 +1,3 @@
-from pyexpat.errors import messages
-
 from AI.AI_API_template import AiApiTemplate
 from openai import OpenAI
 from dotenv import load_dotenv

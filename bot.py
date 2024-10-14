@@ -1,35 +1,35 @@
-import asyncio
-import logging
-import sys
-from json import JSONDecodeError
-from os import getenv
-from json import loads, dumps
-import AI.gpt_api
-import AI.openai_config
-import utils
-from config import Config
+from json import loads
 from database import users_df, create_new_user, check_user_registration
 from AI.openai_config import OpenAIConfig
 
-from aiogram import Bot, Dispatcher, F, Router, html
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
+from aiogram import Router
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+
+from AI import dalle_api, gpt_api
+
 from aiogram.types import (
-    KeyboardButton,
     Message,
     ReplyKeyboardMarkup,
-    ReplyKeyboardRemove,
 )
 
+from parser import Parser
 
 main_router = Router()
 image_router = Router()
 control_router = Router()
 
-gpt_model = AI.gpt_api.GptAgent(OpenAIConfig.gpt_sufix, OpenAIConfig.gpt_prefix)
+gpt_model = gpt_api.GptAgent(OpenAIConfig.gpt_sufix, OpenAIConfig.gpt_prefix)
+dalle_model = dalle_api.DalleAgent(OpenAIConfig.dalle_sufix, OpenAIConfig.dalle_prefix)
+improve_prompt_model = gpt_api.GptAgent("Improve image generation prompt. Original prompt:\n",
+                                        "\nSave the context of the original prompt.")
+
+
+class States(StatesGroup):
+    image: State = State()
+    generate_image: State = State()
+
 
 @main_router.message(CommandStart())
 async def start(message: Message):
@@ -40,6 +40,36 @@ async def start(message: Message):
     else:
         create_new_user(user.id)
         await message.answer(f'Welcome {user.first_name}')
+
+
+@image_router.message(Command("image"))
+async def image(message: Message, state: FSMContext):
+    await message.answer("Type your prompt!")
+    await state.set_state(image)
+
+
+@image_router.message(States.image)
+async def image(message: Message, state: FSMContext):
+    user_prompt = message.text
+    keyboard = [[user_prompt]]
+    for i in range(0, 3):
+        keyboard[0].append(improve_prompt_model.get_response(user_prompt))
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    await state.set_state(States.generate_image)
+    await message.answer("Choose best description of your desired photo: ", reply_markup=reply_markup)
+
+
+@image_router.message(States.generate_image)
+async def image(message: Message, state: FSMContext):
+    final_prompt = message.text
+    try:
+        link = dalle_model.get_response(final_prompt)
+        await message.answer_photo(link)
+        await state.clear()
+    except Exception as e:
+        await state.clear()
+        return await message.answer("Something went wrong...")
+
 
 @main_router.message()
 async def handle_main(message: Message):
@@ -56,10 +86,13 @@ async def handle_main(message: Message):
         return
 
     try:
-        data = loads(text_response)
-        for _, text_data in data.items():
-            utils.process_context(text_data, message)
-    except JSONDecodeError:
-        return await message.answer("Something went wrong!")
+        parsed_response = Parser(text_response).get_data()
+        for key, value in parsed_response.items():
+            if key == "image":
+                improve_prompt_model.get_response(value, context=[])
+                image_link = dalle_model.get_response(value)
+                await message.answer_photo(image_link)
+            else:
+                await message.answer(value)
     except Exception as e:
-        return await message.answer("Something REALLY went wrong!")
+        return await message.answer("Something went wrong...")

@@ -6,3 +6,8 @@ class OpenAIConfig:
 
     gpt_model_name = "gpt-4o-mini"
 
+    dalle_model = "dall-e-3"
+    dalle_resolution = '1024x1024'
+
+    dalle_prefix = ""
+    dalle_sufix = ""
