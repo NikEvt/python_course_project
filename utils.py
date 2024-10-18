@@ -2,10 +2,10 @@ from aiogram.types import Message
 from json import  dumps, loads
 import pandas as pd
 
-def process_context(text_response,
+def process_context(response,
                     message: Message):
     user = message.from_user
-
+    text_response = response.choices[0].message.content
     users = pd.read_csv('users.csv', index_col=0)
 
     context = loads(users.loc[user.id, 'context']) + [{'role': 'user', 'content': message.text}]

@@ -18,7 +18,7 @@ def create_csv_db() -> pd.DataFrame:
         )
         users.set_index('user_id', inplace=True)
     else:
-        users = pd.read_csv('users.csv', index_col=0)
+        users = pd.read_csv(Config.csv_database_path, index_col=0)
     return users
 
 users_df = create_csv_db()
@@ -30,6 +30,6 @@ def create_new_user(user_id: int) -> pd.DataFrame:
 
 def check_user_registration(user_id: int) -> pd.DataFrame:
     global users_df
-    return user_id in users_df.index()
+    return user_id in users_df.index
 
 
